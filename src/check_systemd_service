@@ -12,14 +12,27 @@ from datetime import datetime, timedelta
 
 
 class Service(object):
-    def __init__(self, service):
+    def __init__(self, service, user=None):
         self.name = service
-        self._info = self._get_properties(service)
+        self.user = user
+        self._info = self._get_properties(service, user)
 
     @staticmethod
-    def _get_properties(service):
+    def _get_properties(service, user=None):
         info = {}
-        output = subprocess.check_output(['systemctl', 'show', service])
+        if user is not None:
+            user_id = subprocess.check_output(['id', '-u', user])
+            user_id = user_id.decode().strip()
+
+            context = 'user=' + user + ';userid=' + user_id \
+                      + ';sudo -u ${user} -i /bin/bash -l -c '\
+                        + '\'export XDG_RUNTIME_DIR="/run/user/' + user_id \
+                        + '";export DBUS_SESSION_BUS_ADDRESS="unix:path=${XDG_RUNTIME_DIR}/bus";'\
+                        + 'systemctl --user show '\
+                        + service + '\''
+            output = subprocess.check_output([context], shell=True)
+        else:
+            output = subprocess.check_output(['systemctl', 'show', service])
 
         for line in output.decode('utf-8').split('\n'):
             if not line.strip():
@@ -58,13 +71,16 @@ class Service(object):
             return True
         return False
 
+
 def get_boot_time():
     output = subprocess.check_output(['cat', '/proc/uptime'])
     s = float(output.decode('utf-8').split()[0])
     return datetime.now() - timedelta(seconds=s)
 
+
 def get_perfdata(label, value, warning, critical, minimum=0):
     return '%s=%ss;%s;%s;%s' % (label, value, warning, critical, minimum)
+
 
 def get_status_msg(retval):
     if retval == 0:
@@ -80,6 +96,7 @@ def get_status_msg(retval):
 
     return msg
 
+
 def check_status(service):
     if not service.is_enabled():
         msg = '%s is not enabled' % service.name
@@ -93,6 +110,7 @@ def check_status(service):
         retval = 2
 
     return (retval, msg, None)
+
 
 def check_status_oneshot(service,
                          exit_time_warning=0,
@@ -170,13 +188,14 @@ def check_status_oneshot(service,
 def main():
     parser = argparse.ArgumentParser('Check systemd service status')
     parser.add_argument('--service', required=True)
+    parser.add_argument('--user')
     parser.add_argument('--exit-time-warning', type=int, default=0)
     parser.add_argument('--exit-time-critical', type=int, default=0)
     parser.add_argument('--running-time-warning', type=int, default=0)
     parser.add_argument('--running-time-critical', type=int, default=0)
     args = parser.parse_args()
 
-    service = Service(args.service)
+    service = Service(args.service, args.user)
 
     if service.get_property('Type') == 'oneshot':
         retval, msg, perfdata = check_status_oneshot(service,
@@ -195,6 +214,7 @@ def main():
         print('%s - %s' % (status, msg))
 
     return retval
+
 
 if __name__ == '__main__':
     try:
