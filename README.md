@@ -5,6 +5,9 @@ This plugin checks the status of a given systemd service. However, what makes th
 
 You may provide warning and critical levels for both running time and time since last exit to notify you if the job is not running correctly or if it is running for too long. It also provide performance data for running time and time since exit for oneshot services.
 
+Support for user specific systemd services was added.
+You can also use `--failed` to check if any systemd service failed. 
+
 # Usage
 ## Icinga 2
 Drop [check_systemd_service](src/check_systemd_service) into your nagios plugin dir, typically `/usr/lib/nagios/plugins`.
@@ -16,10 +19,13 @@ Command definition:
 
       arguments = {
         "--service" = "$systemd_service$"
+        "--user" = "$systemd_user$" 
         "--exit-time-warning" = "$systemd_service_exit_time_warning$"
         "--exit-time-critical" = "$systemd_service_exit_time_critical$"
         "--running-time-warning" = "$systemd_service_running_time_warning$"
         "--running-time-critical" = "$systemd_service_running_time_critical$"
+        "--num-failed-warning" = "$systemd_service_num_failed_warning$"
+        "--num-failed-critical" = "$systemd_service_num_failed_critical$"
       }
     }
  
@@ -55,6 +61,8 @@ Host object usage examples:
     
     # Standard service example. Only oneshot services have warning and critical levels as normal
     # services are expected to run continuously.
+    # systemd_user is optional for user specific services    
     vars.systemd_services["Salt Master"] = {
         systemd_service = "salt-master"
+        systemd_user = "www-data"
     }    
