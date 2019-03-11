@@ -79,8 +79,8 @@ def get_boot_time():
 	return datetime.now() - timedelta(seconds=s)
 
 
-def get_perfdata(label, value, warning, critical, minimum=0):
-	return '%s=%ss;%s;%s;%s' % (label, value, warning, critical, minimum)
+def get_perfdata(label, value, warning, critical, minimum=0, unit="s"):
+	return '%s=%s%s;%s;%s;%s' % (label, value, unit, warning, critical, minimum)
 
 
 def get_status_msg(retval):
@@ -215,7 +215,7 @@ def check_failed_services(num_failed_warn, num_failed_crit):
 		message = "These services failed: %s" % " ".join(failed_services)
 		num_failed = len(failed_services)
 
-	perfdata = get_perfdata("num_failed", num_failed, num_failed_warn, num_failed_crit)
+	perfdata = get_perfdata("num_failed", num_failed, num_failed_warn, num_failed_crit, unit="")
 
 	return retval, message, perfdata
 
