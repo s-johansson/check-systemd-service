@@ -6,7 +6,8 @@ This plugin checks the status of a given systemd service. However, what makes th
 You may provide warning and critical levels for both running time and time since last exit to notify you if the job is not running correctly or if it is running for too long. It also provide performance data for running time and time since exit for oneshot services.
 
 Support for user specific systemd services was added.
-You can also use `--failed` to check if any systemd service failed. 
+You can also use `--failed` to check if any systemd service failed.
+Properly configured systems usually have no failed systemd status, so this often suffices as a generic system health test.
 
 # Usage
 ## Icinga 2
