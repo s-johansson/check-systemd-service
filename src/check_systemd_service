@@ -98,14 +98,35 @@ def get_status_msg(retval):
 	return msg
 
 
-def check_status(service):
+def check_status(service,
+				 substate_nok =['reloading'],
+				 state_change_time_warning=0,
+				 state_change_time_critical=0):
 	if not service.is_enabled():
 		msg = '%s is not enabled' % service.name
 		return (2, msg, None)
 
 	if service.is_running():
-		msg = 'active since %s' % service.get_property('ActiveEnterTimestamp')
-		retval = 0
+		
+		if service.get_property('SubState') in substate_nok:
+			now = datetime.now()
+			state_change_timestamp = service.get_property('StateChangeTimestamp')
+			msg = 'service has been in state %s since %s' % (service.get_property('SubState'), state_change_timestamp)
+			warning = timedelta(seconds=state_change_time_warning)
+			critical = timedelta(seconds=state_change_time_critical)
+
+			if warning > critical:
+				raise ValueError('Warning threshold is higher than critical threshold')
+
+			if critical and state_change_timestamp < now - critical:
+				retval = 2
+			elif warning and state_change_timestamp < now - warning:
+				retval = 1
+			else:
+				retval = 0
+		else:
+			msg = 'active since %s' % service.get_property('ActiveEnterTimestamp')
+			retval = 0
 	else:
 		msg = 'inactive since %s' % service.get_property('ActiveExitTimestamp')
 		retval = 2
@@ -114,10 +135,13 @@ def check_status(service):
 
 
 def check_status_oneshot(service,
+					     substate_nok=['reloading'],
                          exit_time_warning=0,
                          exit_time_critical=0,
                          running_time_warning=0,
-                         running_time_critical=0):
+                         running_time_critical=0,
+                         state_change_time_warning=0,
+                         state_change_time_critical=0):
 	if not service.is_enabled():
 		msg = '%s is not enabled' % service.name
 		return (2, msg, None)
@@ -130,20 +154,37 @@ def check_status_oneshot(service,
 	exit_timestamp = service.get_property('ExecMainExitTimestamp')
 
 	if service.is_running():
-		msg = 'service has been running since %s' % start_timestamp
-		running_seconds = int((now - start_timestamp).total_seconds())
-		warning = timedelta(seconds=running_time_warning)
-		critical = timedelta(seconds=running_time_critical)
+		if service.get_property('SubState') in substate_nok:
+			state_change_timestamp = service.get_property('StateChangeTimestamp')
+			msg = 'service has been in state %s since %s' % (service.get_property('SubState'), state_change_timestamp)
+			warning = timedelta(seconds=state_change_time_warning)
+			critical = timedelta(seconds=state_change_time_critical)
 
-		if warning > critical:
-			raise ValueError('Warning threshold is higher than critical threshold')
+			if warning > critical:
+				raise ValueError('Warning threshold is higher than critical threshold')
 
-		if critical and start_timestamp < now - critical:
-			retval = 2
-		elif warning and start_timestamp < now - warning:
-			retval = 1
+			if critical and state_change_timestamp < now - critical:
+				retval = 2
+			elif warning and state_change_timestamp < now - warning:
+				retval = 1
+			else:
+				retval = 0
+		
 		else:
-			retval = 0
+			msg = 'service has been running since %s' % start_timestamp
+			running_seconds = int((now - start_timestamp).total_seconds())
+			warning = timedelta(seconds=running_time_warning)
+			critical = timedelta(seconds=running_time_critical)
+
+			if warning > critical:
+				raise ValueError('Warning threshold is higher than critical threshold')
+
+			if critical and start_timestamp < now - critical:
+				retval = 2
+			elif warning and start_timestamp < now - warning:
+				retval = 1
+			else:
+				retval = 0
 	elif exit_timestamp:
 		msg = 'service ran for %s' % (exit_timestamp - start_timestamp)
 		exit_seconds = int((now - exit_timestamp).total_seconds())
@@ -223,6 +264,7 @@ def check_failed_services(num_failed_warn, num_failed_crit):
 def main():
 	parser = argparse.ArgumentParser('Check systemd service status')
 	parser.add_argument('--service', type=str)
+	parser.add_argument('--substate_nok', type=str, default=['reloading'])
 	parser.add_argument('--failed', action="store_true")
 	parser.add_argument('--user', type=str)
 	parser.add_argument('--exit-time-warning', type=int, default=0)
@@ -231,6 +273,8 @@ def main():
 	parser.add_argument('--running-time-critical', type=int, default=0)
 	parser.add_argument('--num-failed-warning', type=int, default=0)
 	parser.add_argument('--num-failed-critical', type=int, default=0)
+	parser.add_argument('--state-change-time-warning', type=int, default=0)
+	parser.add_argument('--state-change-time-critical', type=int, default=0)
 	args = parser.parse_args()
 
 	if args.service and args.failed:
@@ -242,13 +286,21 @@ def main():
 		if service.get_property('Type') == 'oneshot':
 			retval, msg, perfdata = check_status_oneshot(
 				service,
+				args.substate_nok,
 				args.exit_time_warning,
 				args.exit_time_critical,
 				args.running_time_warning,
-				args.running_time_critical
+				args.running_time_critical,
+				args.state_change_time_warning,
+				args.state_change_time_critical
 			)
 		else:
-			retval, msg, perfdata = check_status(service)
+			retval, msg, perfdata = check_status(
+				service,
+				args.substate_nok,
+				args.state_change_time_warning,
+				args.state_change_time_critical
+			)
 	elif args.failed:
 		retval, msg, perfdata = check_failed_services(args.num_failed_warning, args.num_failed_critical)
 	else:
